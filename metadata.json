@@ -1,0 +1,5 @@
+{
+  "name": "Book Feed Ad Generator",
+  "description": "Generates Excel reports for book marketing by extracting data from a product feed and using Gemini AI to create ad copy.",
+  "requestFramePermissions": []
+}
