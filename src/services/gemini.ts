@@ -1,12 +1,24 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY });
+let ai: GoogleGenAI | null = null;
+
+function getAi() {
+  if (!ai) {
+    const key = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    if (!key) {
+      throw new Error("API ключ Gemini не найден. Укажите GEMINI_API_KEY (или VITE_GEMINI_API_KEY) в настройках Vercel.");
+    }
+    ai = new GoogleGenAI({ apiKey: key });
+  }
+  return ai;
+}
 
 const FALLBACK_MODEL = "gemini-3-flash-preview";
 
 async function generateContentWithFallback(modelName: string, contents: any, config: any = {}) {
   try {
-    const response = await ai.models.generateContent({
+    const client = getAi();
+    const response = await client.models.generateContent({
       model: modelName,
       contents,
       config
@@ -16,7 +28,8 @@ async function generateContentWithFallback(modelName: string, contents: any, con
     // Check for quota/limit errors or general failures
     if (modelName !== FALLBACK_MODEL && (error.status === 429 || error.message?.includes("quota") || error.message?.includes("limit"))) {
       console.warn(`Model ${modelName} failed, falling back to ${FALLBACK_MODEL}`);
-      return await ai.models.generateContent({
+      const clientFallback = getAi();
+      return await clientFallback.models.generateContent({
         model: FALLBACK_MODEL,
         contents,
         config
