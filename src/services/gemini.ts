@@ -66,27 +66,35 @@ export async function generateHeadline(title: string, modelName: string = "gemin
   }
 }
 
-export async function generateAdTexts(title: string, description: string, modelName: string = "gemini-3.1-pro-preview") {
+export async function generateBookAssets(url: string, title: string, description: string, modelName: string = "gemini-3.1-pro-preview") {
   try {
-    const response = await generateContentWithFallback(modelName, `Based on the following book description, write 3 short ad texts for social media (max 220 chars each).
+    // Truncate description if it's too long (e.g. giant HTML blobs)
+    let safeDescription = description || "";
+    // Very basic HTML strip to save tokens
+    safeDescription = safeDescription.replace(/<[^>]*>?/gm, '');
+    if (safeDescription.length > 4000) {
+        safeDescription = safeDescription.substring(0, 4000) + '...';
+    }
+
+    const response = await generateContentWithFallback(modelName, `Analyze the following book details and generate marketing assets.
       
-      Book Title: "${title}"
-      Description: "${description}"
-      
-      Requirements:
-      1. Each text MUST start with: Новинка! «${title}»
-      2. Strict length limit: 220 characters per text.
-      3. Provide exactly 3 variants.
-      
-      Output JSON format:
-      {
-        "variants": ["text1", "text2", "text3"]
-      }`, {
+Book URL: "${url}"
+Book Title: "${title}"
+Description: "${safeDescription}"
+
+Requirements:
+1. "slug": Extract the book title from the URL string. Exclude domain and ID. Convert it strictly to Latin characters (transliterate), keep hyphens. Limit to 40 characters.
+2. "headline": Always start with exactly "Новинка!" followed by book title in quotes «...». Example: Новинка! «Название».
+3. "adTexts": Provide exactly 3 separate variants of short social media ad texts based on the description (max 220 chars each). Each variant MUST start with exactly: Новинка! «${title}».
+
+Output JSON strictly adhering to schema.`, {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            variants: {
+            slug: { type: Type.STRING },
+            headline: { type: Type.STRING },
+            adTexts: {
               type: Type.ARRAY,
               items: { type: Type.STRING }
             }
@@ -95,9 +103,14 @@ export async function generateAdTexts(title: string, description: string, modelN
       });
     
     const json = JSON.parse(response.text || "{}");
-    return json.variants || [];
+    return {
+      slug: json.slug || "",
+      headline: json.headline || "",
+      adTexts: Array.isArray(json.adTexts) ? json.adTexts : []
+    };
   } catch (error) {
-    console.error("Gemini AdText Error:", error);
-    return [];
+    console.error("Gemini Asset Gen Error:", error);
+    return null;
   }
 }
+

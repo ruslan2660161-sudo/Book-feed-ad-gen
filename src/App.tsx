@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { InputArea } from '@/components/InputArea';
 import { ResultsTable } from '@/components/ResultsTable';
 import { processFeed } from '@/services/api';
-import { generateSlug, generateHeadline, generateAdTexts } from '@/services/gemini';
+import { generateBookAssets } from '@/services/gemini';
 import { Loader2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -27,38 +27,56 @@ export default function App() {
         return;
       }
 
-      // 2. Process with Gemini
-      const processedItems = await Promise.all(feedItems.map(async (item: any) => {
+      // 2. Process with Gemini sequentially to respect API rate limits
+      const processedItems: any[] = [];
+      for (let i = 0; i < feedItems.length; i++) {
+        const item = feedItems[i];
+        
         try {
-          // Parallelize Gemini calls for speed
-          const [slug, headline, adTexts] = await Promise.all([
-            generateSlug(item.feedUrl, model),
-            generateHeadline(item.name, model),
-            generateAdTexts(item.name, item.description, model)
-          ]);
-
-          return {
-            originalUrl: item.originalUrl,
-            slug: slug,
-            slugExc: `product_exc_${slug}`,
-            headline: headline,
-            adTexts: adTexts.length > 0 ? adTexts : ["Failed to generate ad text."],
-            selectedAdIndex: 0
-          };
-        } catch (e) {
+          const assets = await generateBookAssets(item.feedUrl, item.name, item.description, model);
+          
+          if (assets) {
+            processedItems.push({
+              originalUrl: item.originalUrl,
+              slug: assets.slug || "missing_slug",
+              slugExc: `product_exc_${assets.slug || "missing_slug"}`,
+              headline: assets.headline || "Missing headline",
+              adTexts: assets.adTexts && assets.adTexts.length > 0 ? assets.adTexts : ["Failed to generate ad text."],
+              selectedAdIndex: 0
+            });
+          } else {
+            processedItems.push({
+              originalUrl: item.originalUrl,
+              slug: "api_error",
+              slugExc: "api_error",
+              headline: "API limits reached",
+              adTexts: ["Failed to generate content due to Gemini API limits or error. Please check your API key or quota in Vercel settings."],
+              selectedAdIndex: 0
+            });
+          }
+          
+          // Update UI immediately with partial results
+          setResults([...processedItems]);
+          
+          // Delay to prevent hitting 15 RPM / quota limits (Google Gen AI Free Tier limit)
+          if (i < feedItems.length - 1) {
+            await new Promise(res => setTimeout(res, 2000));
+          }
+          
+        } catch (e: any) {
           console.error("Error processing item:", item.originalUrl, e);
-          return {
+          processedItems.push({
             originalUrl: item.originalUrl,
             slug: "Error",
             slugExc: "Error",
             headline: "Error",
-            adTexts: ["Error generating content"],
+            adTexts: [e?.message || "Error generating content"],
             selectedAdIndex: 0
-          };
+          });
+          setResults([...processedItems]);
         }
-      }));
+      }
 
-      setResults(processedItems);
     } catch (err: any) {
       setError(err.message || "An error occurred while processing.");
     } finally {
