@@ -60,7 +60,7 @@ export default function App() {
           
           // Delay to prevent hitting 15 RPM / quota limits (Google Gen AI Free Tier limit)
           if (i < feedItems.length - 1) {
-            await new Promise(res => setTimeout(res, 2000));
+            await new Promise(res => setTimeout(res, 5000));
           }
           
         } catch (e: any) {
