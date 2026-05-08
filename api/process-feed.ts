@@ -2,7 +2,8 @@ import sax from "sax";
 import axios from "axios";
 
 // Allow execution to run up to maximum allowed duration to parse large feeds
-export const maxDuration = 60; 
+export const maxDuration = 900; // 15 minutes
+
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
